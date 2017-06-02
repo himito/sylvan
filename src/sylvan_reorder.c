@@ -508,10 +508,9 @@ TASK_IMPL_4(int, sylvan_varswap_p2, uint32_t, var, size_t, first, size_t, count,
 }
 
 /**
- * Very simply varswap, no iterative recovery, no nodes table resizing.
- * returns 0 if it worked.
- * returns 1 if we had to rollback.
- * aborts with exit(-1) if rehashing didn't work during recovery
+ * Simple variable swap, no iterative recovery or nodes table resizing.
+ * Returns 0 if swapped, 1 if not swapped (rolled back) but healthy.
+ * Aborts with exit(-1) if the table is in bad shape.
  */
 TASK_IMPL_1(int, sylvan_simple_varswap, uint32_t, var)
 {
@@ -608,10 +607,10 @@ VOID_TASK_3(sylvan_count_nodes, size_t*, arr, size_t, first, size_t, count)
     }
 }
 
-
-
-/*
- * simplified version without the documentation and assertions
+/**
+ * Simple variable swap, no iterative recovery or nodes table resizing.
+ * Returns 0 if swapped, 1 if not swapped (rolled back) but healthy.
+ * Aborts with exit(-1) if the table is in bad shape.
  * /
 TASK_IMPL_1(int, sylvan_simple_varswap, uint32_t, var)
 {
@@ -620,21 +619,35 @@ TASK_IMPL_1(int, sylvan_simple_varswap, uint32_t, var)
 
     switch (sylvan_varswap(var, 0)) {
     case 0:
+        // update var_to_level and level_to_var
+        level_to_var[var_to_level[var]] = var+1;
+        level_to_var[var_to_level[var+1]] = var;
+        uint32_t save = var_to_level[var];
+        var_to_level[var] = var_to_level[var+1];
+        var_to_level[var+1] = save;
         return 0;
     case -1:
+        // failed phase 1 (no marked nodes)
     case -2:
+        // failed phase 1 (marked nodes)
+        // reverse it, if successful return 1
         if (sylvan_varswap(var, 0) == 0) return 1;
+        // if unsuccessful, then all nodes are restored but rehash failed
         break;
     default:
+        // failed phase 2, try to rollback...
         if (sylvan_varswap(var, 1) == -2) {
             fprintf(stderr, "sylvan: cannot rehash during sifting!\n");
             exit(1);
         }
+        // results -4 and -5 are impossible, so either -1 or -3
         break;
     }
 
+    // try once more to rehash everything, aborts if fails
     sylvan_clear_and_mark();
     sylvan_rehash_all();
+    // no abort, so we can just return 1
     return 1;
 }
 */
